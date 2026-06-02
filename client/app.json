@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "MySlack",
+    "slug": "myslack",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android", "web"],
+    "ios": {
+      "bundleIdentifier": "com.myorg.myslack",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Microphone is required for Huddle audio rooms.",
+        "UIBackgroundModes": ["audio", "voip", "fetch"]
+      }
+    },
+    "android": {
+      "package": "com.myorg.myslack",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Microphone is required for Huddle audio rooms."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
+          }
+        }
+      ]
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "myslack-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "node --env-file=../.env --watch src/app.js",
+    "start": "node --env-file=../.env src/app.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/jwt": "^9.0.0",
+    "@fastify/multipart": "^9.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "bcryptjs": "^2.4.3",
+    "fastify": "^5.0.0",
+    "livekit-server-sdk": "^2.0.0",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

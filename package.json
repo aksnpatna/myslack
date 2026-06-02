@@ -1,0 +1,24 @@
+{
+  "name": "myslack",
+  "private": true,
+  "workspaces": [
+    "client"
+  ],
+  "scripts": {
+    "web": "expo start --web --port 19006",
+    "start": "expo start"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~4.0.1",
+    "expo": "^52.0.0",
+    "expo-asset": "^56.0.15",
+    "expo-av": "^15.0.0",
+    "expo-build-properties": "^0.14.0",
+    "expo-document-picker": "^56.0.4",
+    "livekit-client": "^1.15.13",
+    "react": "18.3.1",
+    "react-dom": "^18.3.1",
+    "react-native": "0.76.3",
+    "react-native-web": "^0.19.13"
+  }
+}

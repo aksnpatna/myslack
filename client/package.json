@@ -1,0 +1,17 @@
+{
+  "name": "myslack-client",
+  "private": true,
+  "version": "1.0.0",
+  "main": "App.js",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "expo": "^52.0.0",
+    "expo-av": "^15.0.0",
+    "expo-build-properties": "^0.14.0",
+    "react": "18.3.1",
+    "react-native": "0.76.3"
+  }
+}

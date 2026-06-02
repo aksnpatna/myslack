@@ -1,0 +1,34 @@
+port: 7880
+
+# RTC Engine ────────────────────────────────────────────────────────────
+rtc:
+  # UDP port range for WebRTC media (must be open on host firewall)
+  port_range_start: 50000
+  port_range_end:   60000
+  # Use host networking so clients can reach the UDP ports directly
+  use_external_ip: true
+  tcp_port: 7881
+
+# API Keys ───────────────────────────────────────────────────────────────
+# Values are injected from the .env via Docker env_file
+keys:
+  myslack_key: myslack_super_secret_key_2026_dev
+
+# Turn / STUN ──────────────────────────────────────────────────────────────
+turn:
+  enabled: true
+  domain: huddle-turn.akstest.win
+  tls_port: 53472
+  udp_port: 3478
+  external_tls: true
+
+# Logging ────────────────────────────────────────────────────────────────
+logging:
+  level: info
+  pion_level: error
+
+# Room defaults ──────────────────────────────────────────────────────────
+room:
+  auto_create: true       # allow token-driven room creation
+  max_participants: 50
+  empty_timeout: 300      # seconds before an empty room is destroyed
