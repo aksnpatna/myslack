@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SafeAreaView, StatusBar, View, ActivityIndicator } from 'react-native';
+import { registerRootComponent } from 'expo';
 import MainWorkspace from './src/screens/MainWorkspace';
 import LoginScreen   from './src/screens/LoginScreen';
 
@@ -77,3 +78,5 @@ export default function App() {
     </SafeAreaView>
   );
 }
+
+registerRootComponent(App);

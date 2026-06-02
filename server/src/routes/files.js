@@ -87,7 +87,29 @@ export default async function fileRoutes(fastify, options) {
       try {
         const text = await extractText(diskPath, part.mimetype, ext);
         if (text && text.trim()) {
-          await processDocumentText(attachmentId, text.trim());
+          // Mark as indexing before starting embeddings
+          await pool.query(
+            `INSERT INTO vector_index_status (file_id, status)
+             VALUES ($1, 'indexing')
+             ON CONFLICT (file_id) DO UPDATE SET status = 'indexing', updated_at = now()`,
+            [attachmentId],
+          );
+          try {
+            await processDocumentText(attachmentId, text.trim());
+            await pool.query(
+              `UPDATE vector_index_status SET status = 'ready', updated_at = now()
+               WHERE file_id = $1`,
+              [attachmentId],
+            );
+          } catch (embedErr) {
+            await pool.query(
+              `UPDATE vector_index_status
+               SET status = 'error', error_msg = $2, updated_at = now()
+               WHERE file_id = $1`,
+              [attachmentId, (embedErr.message ?? 'Unknown error').slice(0, 500)],
+            ).catch(() => {});
+            throw embedErr;
+          }
         }
       } catch (err) {
         fastify.log.warn({ err }, '[vectorEngine] embedding skipped for %s', safeName);
@@ -95,5 +117,24 @@ export default async function fileRoutes(fastify, options) {
     });
 
     return reply.code(201).send({ success: true, fileId: rows[0].id, path: dbPath });
+  });
+
+  // GET /api/files/:fileId/index-status — returns the RAG indexing state for a file
+  fastify.get('/api/files/:fileId/index-status', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { fileId } = request.params;
+
+    const { rows } = await pool.query(
+      `SELECT vis.file_id AS "fileId", vis.status, vis.error_msg AS "errorMsg", vis.updated_at AS "updatedAt"
+       FROM vector_index_status vis
+       WHERE vis.file_id = $1`,
+      [fileId],
+    );
+
+    if (!rows.length) {
+      return reply.send({ fileId, status: 'not_indexed', errorMsg: null });
+    }
+    return reply.send(rows[0]);
   });
 }

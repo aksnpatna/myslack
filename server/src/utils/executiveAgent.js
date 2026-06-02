@@ -97,7 +97,8 @@ class LocalLlmQueue {
 
 const localLlmQueue = new LocalLlmQueue();
 
-export const AGENT_SENDER = 'Automated Project Director';
+export const AGENT_SENDER    = 'Automated Project Director';
+export const SOVEREIGN_SENDER = 'SOVEREIGN-01';
 
 const COMPLIANCE_SLUG = 'admin-compliance-alerts';
 
@@ -132,9 +133,49 @@ function agentFrame(channelId, content, extra = {}) {
 }
 
 /**
- * Called by auth.js after a successful registration INSERT.
- * Posts a summary card to #admin-compliance-alerts in real-time.
+ * Persists an admin intervention record for a low-confidence RAG response,
+ * then broadcasts a real-time alert to all connected admin sockets.
+ *
+ * @param {string|null} messageId
+ * @param {string|null} channelId
+ * @param {string}      query
+ * @param {number|null} confidence  0–1 similarity score
  */
+async function triggerAdminIntervention(messageId, channelId, query, confidence) {
+  try {
+    await pool.query(
+      `INSERT INTO admin_interventions (message_id, channel_id, query, confidence)
+       VALUES ($1, $2, $3, $4)`,
+      [messageId ?? null, channelId ?? null, query, confidence ?? null],
+    );
+
+    const alertContent =
+      `🔴 [ADMIN INTERVENTION REQUIRED]: The RAG agent responded to a query with low ` +
+      `confidence (score: ${confidence !== null ? confidence.toFixed(4) : 'N/A'}). ` +
+      `Query: "${query.slice(0, 200)}". ` +
+      `Review via GET /api/admin/sovereign/interventions.`;
+
+    if (_broadcaster && channelId) {
+      _broadcaster(channelId, agentFrame(channelId, alertContent, {
+        type:   'system_admin_alert',
+        sender: '🔒 Sovereignty Monitor',
+      }));
+    }
+
+    // Also post to compliance channel
+    const complianceId = await getComplianceChannelId();
+    if (complianceId && _broadcaster) {
+      _broadcaster(complianceId, agentFrame(complianceId, alertContent, {
+        type:   'system_admin_alert',
+        sender: '🔒 Sovereignty Monitor',
+      }));
+    }
+  } catch (err) {
+    console.error('[executiveAgent] triggerAdminIntervention error', err.message);
+  }
+}
+
+
 export async function notifyNewRegistration(email, role) {
   try {
     const channelId = await getComplianceChannelId();
@@ -764,7 +805,7 @@ CRITICAL TOOL-CALLING RULES (LOCAL MODEL ENFORCEMENT):
  * @returns {Promise<string>}      - Final text response from the agent
  */
 export async function processExecutiveTask(triggerMessage, contextPayload = {}) {
-  const { channelId = null } = contextPayload;
+  const { channelId = null, _ragMeta } = contextPayload;
 
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -807,6 +848,15 @@ export async function processExecutiveTask(triggerMessage, contextPayload = {}) 
           result = { error: err.message };
         }
 
+        // Track maximum RAG similarity for confidence gating
+        if (_ragMeta && tc.function.name === 'semantic_document_search' && result.results?.length > 0) {
+          const topSim = Math.max(...result.results.map(r => parseFloat(r.similarity) || 0));
+          _ragMeta.maxConfidence = (_ragMeta.maxConfidence == null)
+            ? topSim
+            : Math.max(_ragMeta.maxConfidence, topSim);
+          _ragMeta.query = triggerMessage;
+        }
+
         console.info(
           `[executiveAgent] iteration=${i + 1} tool=${tc.function.name}`,
           JSON.stringify(result).slice(0, 300),
@@ -830,16 +880,19 @@ export async function processExecutiveTask(triggerMessage, contextPayload = {}) 
   return '[Agent: reached maximum reasoning iterations without a terminal response]';
 }
 
-// ─── Chat.js integration: @agent mention handler ─────────────────────────────
+// ─── Chat.js integration: @agent / @sovereign-01 mention handler ─────────────
 
 // ─── Approve command regex ────────────────────────────────────────────────────
 // Matches: @agent approve user@email.com into #channel-slug as 'Display Alias'
 // The alias group (as '...') is optional.
 const APPROVE_RE =
-  /^@agent\s+approve\s+(\S+@\S+)\s+into\s+#([\w-]+)(?:\s+as\s+['"](.+?)['"])?\s*$/i;
+  /^@(?:agent|sovereign-01)\s+approve\s+(\S+@\S+)\s+into\s+#([\w-]+)(?:\s+as\s+['"](.+?)['"])?\s*$/i;
+
+/** Minimum cosine similarity below which a RAG answer triggers admin intervention. */
+const RAG_CONFIDENCE_THRESHOLD = 0.35;
 
 /**
- * Called from chat.js when a committed message includes '@agent'.
+ * Called from chat.js when a committed message includes '@agent' or '@sovereign-01'.
  *
  * @param {string}   userId
  * @param {string}   channelId
@@ -847,9 +900,14 @@ const APPROVE_RE =
  * @param {string}   senderIdentity  - display alias of the requesting user
  * @param {string}   senderRole      - role from users table ('admin'|'member'|…)
  * @param {Function} broadcast       - broadcastToChannel(channelId, payload)
+ * @param {string}   [messageId]     - DB id of the triggering message (optional)
  */
-export async function handleAgentMention(userId, channelId, messageContent, senderIdentity, senderRole, broadcast) {
-  if (!messageContent.includes('@agent')) return;
+export async function handleAgentMention(userId, channelId, messageContent, senderIdentity, senderRole, broadcast, messageId = null) {
+  const isSovereignTrigger = /\@sovereign-01/i.test(messageContent);
+  if (!messageContent.includes('@agent') && !isSovereignTrigger) return;
+
+  // Determine the outbound sender persona
+  const responseSender = isSovereignTrigger ? SOVEREIGN_SENDER : AGENT_SENDER;
 
   const trimmed = messageContent.trim();
 
@@ -884,7 +942,7 @@ export async function handleAgentMention(userId, channelId, messageContent, send
       );
       if (!userRows.length) {
         broadcast(channelId, agentFrame(channelId,
-          `\u274C [ERROR]: No pending user found with email '${targetEmail}'.`));
+          `\u274C [ERROR]: No pending user found with email '${targetEmail}'.`, { sender: responseSender }));
         return;
       }
 
@@ -895,7 +953,7 @@ export async function handleAgentMention(userId, channelId, messageContent, send
       );
       if (!chRows.length) {
         broadcast(channelId, agentFrame(channelId,
-          `\u274C [ERROR]: No channel found with slug '#${channelSlug}'.`));
+          `\u274C [ERROR]: No channel found with slug '#${channelSlug}'.`, { sender: responseSender }));
         return;
       }
 
@@ -906,28 +964,42 @@ export async function handleAgentMention(userId, channelId, messageContent, send
       });
 
       if (result.error) {
-        broadcast(channelId, agentFrame(channelId, `\u274C [ERROR]: ${result.error}`));
+        broadcast(channelId, agentFrame(channelId, `\u274C [ERROR]: ${result.error}`, { sender: responseSender }));
         return;
       }
 
       broadcast(channelId, agentFrame(channelId,
         `\u2705 [PROCESSED]: User ${targetEmail} has been approved and securely mapped ` +
-        `into #${channelSlug} under the identity mask '${displayAlias}'.`));
+        `into #${channelSlug} under the identity mask '${displayAlias}'.`,
+        { sender: responseSender }));
     } catch (err) {
-      broadcast(channelId, agentFrame(channelId, `\u274C [SYSTEM ERROR]: ${err.message}`));
+      broadcast(channelId, agentFrame(channelId, `\u274C [SYSTEM ERROR]: ${err.message}`, { sender: responseSender }));
     }
     return;
   }
 
   // ── General query → agentic LLM reasoning loop ──────────────────────────
-  const query = messageContent.replace(/@agent/gi, '').trim();
+  const query = messageContent.replace(/@sovereign-01/gi, '').replace(/@agent/gi, '').trim();
   if (!query) return;
 
   try {
-    const answer = await processExecutiveTask(query, { channelId, userId, senderIdentity });
-    broadcast(channelId, agentFrame(channelId, answer));
+    const ragMeta = {};
+    const answer = await processExecutiveTask(query, { channelId, userId, senderIdentity, _ragMeta: ragMeta });
+
+    // Confidence gate: if a RAG search was used and confidence is below threshold,
+    // log an admin intervention and annotate the response.
+    if (ragMeta.maxConfidence !== null && ragMeta.maxConfidence !== undefined
+        && ragMeta.maxConfidence < RAG_CONFIDENCE_THRESHOLD) {
+      console.warn(
+        `[executiveAgent] Low RAG confidence (${ragMeta.maxConfidence.toFixed(4)}) ` +
+        `for query in channel ${channelId} — triggering admin intervention.`,
+      );
+      await triggerAdminIntervention(messageId, channelId, query, ragMeta.maxConfidence);
+    }
+
+    broadcast(channelId, agentFrame(channelId, answer, { sender: responseSender }));
   } catch (err) {
     console.error('[executiveAgent] handleAgentMention error', err.message);
-    broadcast(channelId, agentFrame(channelId, `Agent encountered an error: ${err.message}`));
+    broadcast(channelId, agentFrame(channelId, `Agent encountered an error: ${err.message}`, { sender: responseSender }));
   }
 }

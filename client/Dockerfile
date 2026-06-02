@@ -26,7 +26,25 @@ FROM nginx:alpine
 
 COPY --from=builder /dist /usr/share/nginx/html
 
-# SPA routing — send all routes to index.html
-RUN printf 'server {\n  listen 80;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' > /etc/nginx/conf.d/default.conf
+RUN cat << 'NGINXEOF' > /etc/nginx/conf.d/default.conf
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  gzip on;
+  gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+  location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|json)$ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+    try_files $uri =404;
+  }
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+NGINXEOF
 
 EXPOSE 80

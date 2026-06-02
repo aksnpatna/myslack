@@ -6,6 +6,10 @@ import {
 import * as DocumentPicker from 'expo-document-picker';
 import HuddleWorkspace    from './HuddleWorkspace';
 import CollabCanvas       from './CollabCanvas';
+import { useSovereignMode }   from '../hooks/useSovereignMode';
+import SovereignHeader        from '../components/sovereign/SovereignHeader';
+import BentoMetricCard        from '../components/sovereign/BentoMetricCard';
+import ObfuscatedMessage      from '../components/sovereign/ObfuscatedMessage';
 
 const WS_URL  = process.env.EXPO_PUBLIC_WS_URL  ?? 'wss://slack-api.akstest.win/ws/chat';
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://slack-api.akstest.win';
@@ -17,6 +21,9 @@ function authHeader() {
 
 export default function MainWorkspace({ user, channels, onLogout }) {
   const isAdmin = user.role === 'admin';
+
+  // ── Sovereign Mode toggle (Phase 3)
+  const [sovereignMode, toggleSovereignMode] = useSovereignMode();
 
   // ── channel list (local copy so we can push new channels without refetch)
   const [localChannels, setLocalChannels] = useState(channels);
@@ -64,6 +71,49 @@ export default function MainWorkspace({ user, channels, onLogout }) {
   // ── quarantine feed state (admin only)
   const [quarantineLogs, setQuarantineLogs] = useState([]);
   const [qLogsBusy,      setQLogsBusy]      = useState(false);
+
+  // ── Phase 4: Topic threading state
+  // topicsMap: { [channelId]: Topic[] }
+  const [topicsMap,        setTopicsMap]        = useState({});
+  const [expandedChannels, setExpandedChannels] = useState({});
+  const [activeTopic,      setActiveTopic]      = useState(null);
+
+  // ── Sovereign metrics (Phase 3) — polled only when sovereign mode is on
+  const [sovereignMetrics, setSovereignMetrics] = useState([]);
+
+  // Load topics for all visible channels once channel list is ready
+  useEffect(() => {
+    if (!localChannels.length) return;
+    const load = async () => {
+      const entries = await Promise.all(
+        localChannels.map(async (ch) => {
+          try {
+            const r = await fetch(`${API_URL}/api/channels/${ch.id}/topics`, { headers: authHeader() });
+            if (!r.ok) return [ch.id, []];
+            return [ch.id, await r.json()];
+          } catch {
+            return [ch.id, []];
+          }
+        }),
+      );
+      setTopicsMap(Object.fromEntries(entries));
+    };
+    load();
+  }, [localChannels]);
+
+  // Fetch latest system metrics when sovereign mode is active (admin only)
+  useEffect(() => {
+    if (!sovereignMode || !isAdmin) return;
+    const fetchMetrics = () => {
+      fetch(`${API_URL}/api/admin/sovereign/metrics?limit=4`, { headers: authHeader() })
+        .then((r) => r.ok ? r.json() : [])
+        .then(setSovereignMetrics)
+        .catch(() => {});
+    };
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 30_000);
+    return () => clearInterval(interval);
+  }, [sovereignMode, isAdmin]);
 
   // ── load message history whenever active channel changes
   useEffect(() => {
@@ -328,9 +378,21 @@ export default function MainWorkspace({ user, channels, onLogout }) {
       {/* ── Sidebar ─────────────────────────────────────────── */}
       <View style={[s.sidebar, isMobile && s.sidebarMobile, isMobile && !showSidebar && s.sidebarHidden]}>
 
-        {/* Channels heading + optional '+' for admin */}
+        {/* ── Sovereign Mode toggle ─────────────────────── */}
+        <TouchableOpacity
+          style={[s.sovereignToggle, sovereignMode && s.sovereignToggleActive]}
+          onPress={toggleSovereignMode}
+        >
+          <Text style={[s.sovereignToggleText, sovereignMode && s.sovereignToggleTextActive]}>
+            {sovereignMode ? '⬡ SOVEREIGN MODE ON' : '⬡ SOVEREIGN MODE'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Channels / Project Containers heading + optional '+' for admin */}
         <View style={s.sidebarHeadingRow}>
-          <Text style={s.sidebarHeading}>Channels</Text>
+          <Text style={s.sidebarHeading}>
+            {sovereignMode ? 'PROJECT CONTAINERS' : 'Channels'}
+          </Text>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {isAdmin && (
               <TouchableOpacity style={s.addBtn} onPress={() => { setShowNewCh(true); setNewChErr(''); setNewChName(''); }}>
@@ -346,15 +408,95 @@ export default function MainWorkspace({ user, channels, onLogout }) {
         </View>
 
         <ScrollView style={{ flex: 1 }}>
-          {visibleChannels.map((ch) => (
-            <TouchableOpacity
-              key={ch.id}
-              style={[s.channelRow, activeChannel?.id === ch.id && s.channelRowActive]}
-              onPress={() => { setActiveChannel(ch); setActiveThread(null); if (isMobile) setShowSidebar(false); }}
-            >
-              <Text style={s.channelName}># {ch.name}</Text>
-            </TouchableOpacity>
-          ))}
+          {/* ── Sovereign Metrics bento row (admin, sovereign mode only) ── */}
+          {sovereignMode && isAdmin && sovereignMetrics.length > 0 && (
+            <View style={s.bentoRow}>
+              {sovereignMetrics.slice(0, 4).map((m) => (
+                <BentoMetricCard
+                  key={m.id}
+                  label={m.node_id}
+                  value={m.latency_ms != null ? `${m.latency_ms}ms` : (m.cpu_pct != null ? `${m.cpu_pct}%` : '—')}
+                  subValue={m.cpu_pct != null && m.latency_ms != null ? `CPU ${m.cpu_pct}%` : undefined}
+                  status={m.latency_ms > 500 || m.cpu_pct > 80 ? 'warning' : 'ok'}
+                  nodeId={m.node_id}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* ── Project Containers / Channel list ─────────────────────── */}
+          {visibleChannels.map((ch) => {
+            const chTopics   = topicsMap[ch.id] ?? [];
+            const isExpanded = expandedChannels[ch.id] ?? false;
+            const isActive   = activeChannel?.id === ch.id;
+
+            if (!sovereignMode) {
+              // ── Standard (non-sovereign) flat channel row ──
+              return (
+                <TouchableOpacity
+                  key={ch.id}
+                  style={[s.channelRow, isActive && s.channelRowActive]}
+                  onPress={() => { setActiveChannel(ch); setActiveThread(null); setActiveTopic(null); if (isMobile) setShowSidebar(false); }}
+                >
+                  <Text style={s.channelName}># {ch.name}</Text>
+                </TouchableOpacity>
+              );
+            }
+
+            // ── Sovereign: Project Container with collapsible Topic Streams ──
+            return (
+              <View key={ch.id} style={s.projectContainer}>
+                {/* Project Container header */}
+                <TouchableOpacity
+                  style={[s.projectHeader, isActive && s.projectHeaderActive]}
+                  onPress={() => {
+                    setActiveChannel(ch);
+                    setActiveThread(null);
+                    setActiveTopic(null);
+                    setExpandedChannels((prev) => ({ ...prev, [ch.id]: !prev[ch.id] }));
+                    if (isMobile && !chTopics.length) setShowSidebar(false);
+                  }}
+                >
+                  <Text style={s.projectExpandIcon}>{isExpanded ? '▾' : '▸'}</Text>
+                  <Text style={[s.projectName, isActive && s.projectNameActive]} numberOfLines={1}>
+                    {ch.name.toUpperCase()}
+                  </Text>
+                  {chTopics.length > 0 && (
+                    <Text style={s.topicCount}>{chTopics.length}</Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Topic Streams (visible when expanded) */}
+                {isExpanded && chTopics.map((topic) => {
+                  const statusColor =
+                    topic.status === 'RESOLVING'  ? '#ff6b35' :
+                    topic.status === 'MONITORING' ? '#ffca28' : '#00e676';
+                  const isTopicActive = activeTopic?.id === topic.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={topic.id}
+                      style={[s.topicRow, isTopicActive && s.topicRowActive]}
+                      onPress={() => {
+                        setActiveTopic(topic);
+                        setActiveChannel(ch);
+                        setActiveThread(null);
+                        if (isMobile) setShowSidebar(false);
+                      }}
+                    >
+                      <View style={[s.topicStatusDot, { backgroundColor: statusColor }]} />
+                      <Text style={[s.topicName, isTopicActive && s.topicNameActive]} numberOfLines={1}>
+                        {topic.name}
+                      </Text>
+                      <View style={[s.topicBadge, { borderColor: statusColor }]}>
+                        <Text style={[s.topicBadgeText, { color: statusColor }]}>{topic.status}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            );
+          })}
 
           {/* ── Admin Operations Panel ─────────────────────── */}
           {isAdmin && (
@@ -487,13 +629,26 @@ export default function MainWorkspace({ user, channels, onLogout }) {
       )}
       {/* ── Main feed ───────────────────────────────────────── */}
       <View style={s.feed}>
+        {/* Sovereign Header (shown only in sovereign mode) */}
+        {sovereignMode && (
+          <SovereignHeader
+            nodeLocation={process.env.EXPO_PUBLIC_NODE_LOCATION ?? 'LOCAL'}
+            e2eeVerified
+            isAdmin={isAdmin}
+            channelName={activeTopic ? `${activeChannel?.name} › ${activeTopic.name}` : activeChannel?.name}
+          />
+        )}
         <View style={s.feedHeaderRow}>
           {isMobile && (
             <TouchableOpacity style={s.hamburger} onPress={() => setShowSidebar(true)}>
               <Text style={s.hamburgerIcon}>☰</Text>
             </TouchableOpacity>
           )}
-          <Text style={s.feedHeaderText}># {activeChannel?.name ?? '—'}</Text>
+          <Text style={s.feedHeaderText}>
+            {activeTopic
+              ? `# ${activeChannel?.name} › ${activeTopic.name}`
+              : `# ${activeChannel?.name ?? '—'}`}
+          </Text>
           {/* Board toggle */}
           <TouchableOpacity
             style={[s.boardToggleBtn, showCanvas && s.boardToggleBtnActive]}
@@ -671,6 +826,33 @@ const s = StyleSheet.create({
   channelName:        { color: '#d1d2d3', fontSize: 15 },
   logoutBtn:          { margin: 12, padding: 10, borderRadius: 6, backgroundColor: '#2c2f33', alignItems: 'center' },
   logoutText:         { color: '#9b9b9b', fontSize: 13 },
+
+  // ── Sovereign mode toggle ─────────────────────────────────────────────────
+  sovereignToggle:         { marginHorizontal: 10, marginTop: 8, marginBottom: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 4, borderWidth: 1, borderColor: '#1a2e50', backgroundColor: '#0d1a30', alignItems: 'center' },
+  sovereignToggleActive:   { borderColor: '#0066ff', backgroundColor: 'rgba(0,102,255,0.10)' },
+  sovereignToggleText:     { color: '#3a5070', fontSize: 9, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', textTransform: 'uppercase', letterSpacing: 1 },
+  sovereignToggleTextActive:{ color: '#0066ff', fontWeight: '700' },
+
+  // ── Project Container (sovereign sidebar) ────────────────────────────────
+  projectContainer:        { marginBottom: 2 },
+  projectHeader:           { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, gap: 5 },
+  projectHeaderActive:     { backgroundColor: 'rgba(0,102,255,0.15)' },
+  projectExpandIcon:       { color: '#3a5070', fontSize: 10, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', width: 10 },
+  projectName:             { color: '#5e7a9e', fontSize: 10, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', fontWeight: '700', letterSpacing: 0.8, flex: 1 },
+  projectNameActive:       { color: '#0066ff' },
+  topicCount:              { color: '#3a5070', fontSize: 8, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', backgroundColor: '#0d1a30', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 },
+
+  // ── Topic Stream rows ────────────────────────────────────────────────────
+  topicRow:                { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 20, gap: 6 },
+  topicRowActive:          { backgroundColor: 'rgba(0,102,255,0.12)' },
+  topicStatusDot:          { width: 5, height: 5, borderRadius: 2.5, flexShrink: 0 },
+  topicName:               { color: '#4a6a8a', fontSize: 11, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', flex: 1 },
+  topicNameActive:         { color: '#e8f4ff' },
+  topicBadge:              { borderRadius: 3, borderWidth: 1, paddingHorizontal: 4, paddingVertical: 1 },
+  topicBadgeText:          { fontSize: 7, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', fontWeight: '700', letterSpacing: 0.5 },
+
+  // ── Bento metrics row ────────────────────────────────────────────────────
+  bentoRow:                { flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingVertical: 6, flexWrap: 'wrap' },
 
   // admin operations panel
   adminPanel:         { margin: 10, marginTop: 20, padding: 12, backgroundColor: '#1e1f23', borderRadius: 8, borderWidth: 1, borderColor: '#2d2f33' },

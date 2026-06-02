@@ -170,11 +170,12 @@ export default async function chatRoutes(fastify, options) {
         );
       }
 
-      // Trigger executive agent if message mentions @agent
-      if (safeContent.includes('@agent')) {
-        handleAgentMention(userId, channelId, safeContent, senderIdentity, senderRole, broadcastToChannel).catch(
-          (err) => console.error('[agent] unhandled error', err.message),
-        );
+      // Trigger executive agent if message mentions @agent or @sovereign-01
+      if (safeContent.includes('@agent') || /\@sovereign-01/i.test(safeContent)) {
+        handleAgentMention(
+          userId, channelId, safeContent, senderIdentity, senderRole,
+          broadcastToChannel, msgRows[0].id,
+        ).catch((err) => console.error('[agent] unhandled error', err.message));
       }
 
       const broadcast = {
