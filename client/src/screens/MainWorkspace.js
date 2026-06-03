@@ -38,6 +38,7 @@ export default function MainWorkspace({ user, channels, onLogout }) {
   const [threadInput,   setThreadInput]   = useState('');
   const wsRef = useRef(null);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // ── file attachment state
   const [pendingFile,    setPendingFile]  = useState(null);
@@ -386,17 +387,17 @@ export default function MainWorkspace({ user, channels, onLogout }) {
           activeChannel={activeChannel}
           activeTopic={activeTopic}
           onToggleExpand={(chId) => setExpandedChannels((prev) => ({ ...prev, [chId]: !prev[chId] }))}
-          onSelectChannel={(ch) => { setActiveChannel(ch); setActiveThread(null); setActiveTopic(null); }}
+          onSelectChannel={(ch) => { setActiveChannel(ch); setActiveThread(null); setActiveTopic(null); if (isMobile) setShowSidebar(false); }}
           onSelectTopic={(topic) => setActiveTopic(topic)}
           onToggleSovereign={toggleSovereignMode}
           isAdmin={isAdmin}
           sovereignMetrics={sovereignMetrics}
-          onToggleMobile={() => setShowSidebar(false)}
+          onToggleMobile={isMobile ? () => setShowSidebar(false) : () => setSidebarCollapsed((v) => !v)}
           isMobile={isMobile}
+          collapsed={!isMobile && sidebarCollapsed}
         />
       ) : (
-      <View style={[s.sidebar, isMobile && s.sidebarMobile, isMobile && !showSidebar && s.sidebarHidden]}>
-
+      <View style={[s.sidebar, isMobile && s.sidebarMobile, isMobile && !showSidebar && s.sidebarHidden, !isMobile && sidebarCollapsed && s.sidebarCollapsed]}>
         {/* ── Sovereign Mode toggle ─────────────────────── */}
         <TouchableOpacity
           style={[s.sovereignToggle, sovereignMode && s.sovereignToggleActive]}
@@ -664,6 +665,11 @@ export default function MainWorkspace({ user, channels, onLogout }) {
               <Text style={s.hamburgerIcon}>☰</Text>
             </TouchableOpacity>
           )}
+          {!isMobile && (
+            <TouchableOpacity style={s.hamburger} onPress={() => setSidebarCollapsed((v) => !v)}>
+              <Text style={s.hamburgerIcon}>{sidebarCollapsed ? '☰' : '◀'}</Text>
+            </TouchableOpacity>
+          )}
           <Text style={s.feedHeaderText}>
             {activeTopic
               ? `# ${activeChannel?.name} › ${activeTopic.name}`
@@ -751,6 +757,8 @@ export default function MainWorkspace({ user, channels, onLogout }) {
               <ObfuscatedIdentityWrapper
                 displayName={msg.sender}
                 realName={msg.realName ?? msg.real_name ?? undefined}
+                userId={msg.userId ?? msg.sender_id ?? undefined}
+                currentUserId={user.id}
                 isAdmin={isAdmin}
                 compact
               />
@@ -823,6 +831,8 @@ export default function MainWorkspace({ user, channels, onLogout }) {
             <ObfuscatedIdentityWrapper
               displayName={activeThread.sender}
               realName={activeThread.realName ?? activeThread.real_name ?? undefined}
+              userId={activeThread.userId ?? activeThread.sender_id ?? undefined}
+              currentUserId={user.id}
               isAdmin={isAdmin}
               compact
             />
@@ -836,6 +846,8 @@ export default function MainWorkspace({ user, channels, onLogout }) {
                 <ObfuscatedIdentityWrapper
                   displayName={msg.sender}
                   realName={msg.realName ?? msg.real_name ?? undefined}
+                  userId={msg.userId ?? msg.sender_id ?? undefined}
+                  currentUserId={user.id}
                   isAdmin={isAdmin}
                   compact
                 />
@@ -864,13 +876,14 @@ export default function MainWorkspace({ user, channels, onLogout }) {
 }
 
 const s = StyleSheet.create({
-  root:               { flex: 1, flexDirection: 'row', backgroundColor: '#1a1d21' },
+  root:               { flex: 1, flexDirection: 'row', backgroundColor: '#0b1326', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
 
   // sidebar
-  sidebar:            { width: 260, backgroundColor: '#19171d', paddingTop: 16, flexDirection: 'column' },
-  sidebarMobile:      { position: 'absolute', left: 0, top: 0, bottom: 0, zIndex: 10, width: '80%', maxWidth: 300, shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 12, elevation: 10 },
+  sidebar:            { width: 280, backgroundColor: '#0b1326', borderRightWidth: 1, borderRightColor: '#1a2e50', flexShrink: 0 },
+  sidebarCollapsed:   { width: 0, borderRightWidth: 0, overflow: 'hidden' },
+  sidebarMobile:      { position: 'fixed', left: 0, top: 0, bottom: 0, width: 280, maxWidth: '85%', zIndex: 100, backgroundColor: '#0b1326', borderRightWidth: 1, borderRightColor: '#1a2e50', shadowColor: '#000', shadowOpacity: 0.8, shadowRadius: 24, elevation: 20 },
   sidebarHidden:      { display: 'none' },
-  mobileBackdrop:     { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 9 },
+  mobileBackdrop:     { position: 'fixed', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 99 },
   sidebarHeadingRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 4 },
   sidebarHeading:     { color: '#9b9b9b', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
   addBtn:             { width: 22, height: 22, borderRadius: 4, backgroundColor: '#2c2f33', alignItems: 'center', justifyContent: 'center' },
@@ -957,8 +970,8 @@ const s = StyleSheet.create({
   modalBtnSecText:    { color: '#9b9b9b', fontWeight: '600', fontSize: 14 },
 
   // feed
-  feed:               { flex: 1, flexDirection: 'column', minWidth: 0 },
-  feedHeaderRow:      { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#333' },
+  feed:               { flex: 1, flexDirection: 'column', minWidth: 0, overflow: 'hidden' },
+  feedHeaderRow:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0b1326', borderBottomWidth: 1, borderBottomColor: '#1a2e50' },
   feedHeaderText:     { flex: 1, color: '#fff', fontSize: 18, fontWeight: '700', padding: 16 },
   hamburger:          { paddingHorizontal: 14, paddingVertical: 14 },
   hamburgerIcon:      { color: '#d1d2d3', fontSize: 22 },

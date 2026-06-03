@@ -997,9 +997,19 @@ export async function handleAgentMention(userId, channelId, messageContent, send
       await triggerAdminIntervention(messageId, channelId, query, ragMeta.maxConfidence);
     }
 
-    broadcast(channelId, agentFrame(channelId, answer, { sender: responseSender }));
+    broadcast(channelId, agentFrame(channelId, answer, {
+      sender: responseSender,
+      ragConfidence: ragMeta?.maxConfidence ?? null,
+      citation: ragMeta?.topChunkIds?.[0] ?? null,
+      nodeId: process.env.EXPO_PUBLIC_NODE_LOCATION ?? 'NODE-01',
+    }));
   } catch (err) {
     console.error('[executiveAgent] handleAgentMention error', err.message);
-    broadcast(channelId, agentFrame(channelId, `Agent encountered an error: ${err.message}`, { sender: responseSender }));
+    broadcast(channelId, agentFrame(channelId, `Agent encountered an error: ${err.message}`, {
+      sender: responseSender,
+      ragConfidence: null,
+      citation: null,
+      nodeId: process.env.EXPO_PUBLIC_NODE_LOCATION ?? 'NODE-01',
+    }));
   }
 }

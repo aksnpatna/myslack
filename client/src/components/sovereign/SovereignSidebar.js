@@ -20,7 +20,16 @@ export default function SovereignSidebar({
   sovereignMetrics = [],
   onToggleMobile,
   isMobile = false,
+  collapsed = false,
 }) {
+  if (!isMobile && collapsed) {
+    return <View style={s.collapsedBar}>
+      <TouchableOpacity style={s.collapsedToggle} onPress={onToggleMobile}>
+        <Text style={s.collapsedIcon}>⬡</Text>
+      </TouchableOpacity>
+    </View>;
+  }
+
   const visibleChannels = isAdmin
     ? channels
     : channels.filter((c) => c.isMember);
@@ -395,5 +404,28 @@ const s = StyleSheet.create({
     fontSize: 8,
     fontFamily: 'monospace',
     textTransform: 'uppercase',
+  },
+  collapsedBar: {
+    width: 36,
+    backgroundColor: '#0b1326',
+    borderRightWidth: 1,
+    borderRightColor: '#1a2e50',
+    alignItems: 'center',
+    paddingTop: 12,
+  },
+  collapsedToggle: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: '#0d1a30',
+    borderWidth: 1,
+    borderColor: '#1a2e50',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collapsedIcon: {
+    color: '#0066ff',
+    fontSize: 10,
+    fontFamily: 'monospace',
   },
 });

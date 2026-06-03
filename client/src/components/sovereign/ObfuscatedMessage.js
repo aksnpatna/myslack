@@ -19,13 +19,19 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
  * @param {number}   [props.replyCount]
  */
 export default function ObfuscatedMessage({ message, isAdmin, realName, onReply, replyCount = 0 }) {
-  const { sender, content, createdAt } = message;
+  const { sender, content, createdAt, ragConfidence, citation, nodeId } = message;
   const isSystemMsg = sender?.startsWith('🔒') || sender?.startsWith('⚠️')
-    || sender === 'Automated Project Director' || sender === 'SOVEREIGN-01';
+    || sender === 'Automated Project Director' || sender === 'SOVEREIGN-01'
+    || sender?.startsWith('❌') || sender?.startsWith('⚠');
+  const isAgentMsg = sender === 'Automated Project Director' || sender === 'SOVEREIGN-01';
 
   const timestamp = createdAt
     ? new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '';
+
+  const ctxPct = ragConfidence != null ? `${(ragConfidence * 100).toFixed(1)}%` : '—';
+  const srcDoc = citation ?? '—';
+  const node   = nodeId ?? process.env.EXPO_PUBLIC_NODE_LOCATION ?? 'NODE-01';
 
   return (
     <View style={[s.row, isSystemMsg && s.systemRow]}>
@@ -50,6 +56,26 @@ export default function ObfuscatedMessage({ message, isAdmin, realName, onReply,
         </View>
 
         <Text style={[s.content, isSystemMsg && s.systemContent]}>{content}</Text>
+
+        {/* Agent RAG Metadata Footer */}
+        {isAgentMsg && (
+          <View style={s.ragFooter}>
+            <View style={s.ragItem}>
+              <Text style={s.ragLabel}>CTX MAP</Text>
+              <Text style={s.ragValue}>{ctxPct}</Text>
+            </View>
+            <View style={s.ragDivider} />
+            <View style={s.ragItem}>
+              <Text style={s.ragLabel}>SOURCE</Text>
+              <Text style={s.ragValue} numberOfLines={1}>{srcDoc}</Text>
+            </View>
+            <View style={s.ragDivider} />
+            <View style={s.ragItem}>
+              <Text style={s.ragLabel}>NODE</Text>
+              <Text style={s.ragValue}>{node}</Text>
+            </View>
+          </View>
+        )}
 
         {!!onReply && (
           <TouchableOpacity style={s.replyBtn} onPress={onReply}>
@@ -149,5 +175,42 @@ const s = StyleSheet.create({
     color: '#3a5070',
     fontSize: 10,
     fontFamily: 'monospace',
+  },
+  // ── Agent RAG metadata footer ──────────────────────
+  ragFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#1a2e50',
+  },
+  ragItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+    minWidth: 0,
+  },
+  ragLabel: {
+    color: '#3a5070',
+    fontSize: 8,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  ragValue: {
+    color: '#0066ff',
+    fontSize: 9,
+    fontFamily: 'monospace',
+    flex: 1,
+    minWidth: 0,
+  },
+  ragDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: '#1a2e50',
   },
 });

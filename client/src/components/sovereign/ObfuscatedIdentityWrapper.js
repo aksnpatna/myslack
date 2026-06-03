@@ -3,12 +3,15 @@ import { View, Text, StyleSheet } from 'react-native';
 const OB_CODE_RE = /^(CONSULTANT|COLLABORATOR|OPERATOR)-[A-Z0-9]{2,6}$/;
 
 /**
- * Wraps a user name — shows obfuscated code for non-admins, real identity for admins.
+ * Wraps a user name — shows obfuscated code for non-admins viewing others.
+ * - Admin users always see real names (with badge on obfuscated)
+ * - Non-admin users see their own name always, but others as obfuscated
  *
  * @param {object}  props
  * @param {string}  props.displayName   - sender name as received from the server
- * @param {string}  [props.realName]     - unmasked real name (admin only)
- * @param {string}  [props.userId]       - used as key for identity lookup
+ * @param {string}  [props.realName]     - unmasked real name
+ * @param {string}  [props.userId]       - sender userId
+ * @param {string}  [props.currentUserId] - the logged-in user's ID
  * @param {boolean} props.isAdmin        - when true, real name badge is shown
  * @param {boolean} [props.compact]      - smaller footprint for inline use
  */
@@ -16,11 +19,14 @@ export default function ObfuscatedIdentityWrapper({
   displayName,
   realName,
   userId,
+  currentUserId,
   isAdmin = false,
   compact = false,
 }) {
   const isObfuscated = OB_CODE_RE.test(displayName ?? '');
-  const showRealBadge = isAdmin && isObfuscated && realName && realName !== displayName;
+  const isOwnMessage = currentUserId && userId && currentUserId === userId;
+  const canSeeReal = isAdmin || isOwnMessage;
+  const showRealBadge = canSeeReal && isObfuscated && realName && realName !== displayName;
 
   return (
     <View style={[s.row, compact && s.rowCompact]}>

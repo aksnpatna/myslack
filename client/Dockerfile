@@ -19,7 +19,9 @@ ARG EXPO_PUBLIC_WS_URL=wss://slack-api.akstest.win/ws/chat
 ENV EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL
 ENV EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
 
-RUN /monorepo/node_modules/.bin/expo export --platform web --output-dir /dist
+RUN /monorepo/node_modules/.bin/expo export --platform web --output-dir /dist && \
+    sed -i 's|<meta name="viewport"|<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"|' /dist/index.html && \
+    sed -i 's|</head>|<style>html,body,#root{height:100%;width:100%;margin:0;padding:0;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;-webkit-overflow-scrolling:touch}</style></head>|' /dist/index.html
 
 # ── Production: serve static build ──────────────────────────────────────────
 FROM nginx:alpine
