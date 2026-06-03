@@ -83,6 +83,25 @@ export default function MainWorkspace({ user, channels, onLogout }) {
 
   // ── Sovereign metrics (Phase 3) — polled only when sovereign mode is on
   const [sovereignMetrics, setSovereignMetrics] = useState([]);
+  const [sovMetricRefreshed, setSovMetricRefreshed] = useState(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportResult, setReportResult] = useState(null);
+
+  // ── Generate Sovereignty Audit Report
+  const handleGenerateReport = useCallback(async () => {
+    setReportBusy(true);
+    setReportResult(null);
+    try {
+      const res  = await fetch(`${API_URL}/api/admin/sovereign/report`, { headers: authHeader() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Report generation failed.');
+      setReportResult(data);
+    } catch (err) {
+      setReportResult({ error: err.message });
+    } finally {
+      setReportBusy(false);
+    }
+  }, []);
 
   // Load topics for all visible channels once channel list is ready
   useEffect(() => {
@@ -111,10 +130,11 @@ export default function MainWorkspace({ user, channels, onLogout }) {
       fetch(`${API_URL}/api/admin/sovereign/metrics?limit=4`, { headers: authHeader() })
         .then((r) => r.ok ? r.json() : [])
         .then(setSovereignMetrics)
+        .then(() => setSovMetricRefreshed(new Date()))
         .catch(() => {});
     };
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 30_000);
+    const interval = setInterval(fetchMetrics, 5_000);
     return () => clearInterval(interval);
   }, [sovereignMode, isAdmin]);
 
@@ -436,11 +456,16 @@ export default function MainWorkspace({ user, channels, onLogout }) {
                   key={m.id}
                   label={m.node_id}
                   value={m.latency_ms != null ? `${m.latency_ms}ms` : (m.cpu_pct != null ? `${m.cpu_pct}%` : '—')}
-                  subValue={m.cpu_pct != null && m.latency_ms != null ? `CPU ${m.cpu_pct}%` : undefined}
-                  status={m.latency_ms > 500 || m.cpu_pct > 80 ? 'warning' : 'ok'}
+                  subValue={m.cpu_pct != null ? `CPU ${m.cpu_pct}% · DB ${m.db_status ?? '?'}` : undefined}
+                  status={m.status ?? 'ok'}
                   nodeId={m.node_id}
                 />
               ))}
+              {sovMetricRefreshed && (
+                <Text style={s.metricRefresh}>
+                  Updated {Math.round((Date.now() - sovMetricRefreshed) / 1000)}s ago
+                </Text>
+              )}
             </View>
           )}
 
@@ -635,6 +660,36 @@ export default function MainWorkspace({ user, channels, onLogout }) {
                   {!!log.flagged_reason && <Text style={s.qReason}>{log.flagged_reason}</Text>}
                 </View>
               ))}
+            </View>
+          )}
+
+          {/* ── Sovereignty Audit Report (admin only) ────── */}
+          {isAdmin && (
+            <View style={s.reportPanel}>
+              <TouchableOpacity
+                style={[s.reportBtn, reportBusy && { opacity: 0.6 }]}
+                onPress={handleGenerateReport}
+                disabled={reportBusy}
+              >
+                {reportBusy
+                  ? <ActivityIndicator color="#0066ff" size="small" />
+                  : <Text style={s.reportBtnText}>⬡ GENERATE SOVEREIGNTY AUDIT</Text>
+                }
+              </TouchableOpacity>
+              {reportResult && !reportResult.error && (
+                <View style={s.reportResult}>
+                  <Text style={s.reportResultLabel}>Report Generated ✓</Text>
+                  <Text style={s.reportResultMeta}>
+                    {reportResult.metrics?.node_count ?? '—'} nodes · {reportResult.metrics?.avg_latency ?? '—'}ms avg · {reportResult.metrics?.latencyStatus ?? '—'}
+                  </Text>
+                  <ScrollView style={s.reportMd} nestedScrollEnabled>
+                    <Text style={s.reportMdText}>{reportResult.report?.summary_md?.slice(0, 500)}</Text>
+                  </ScrollView>
+                </View>
+              )}
+              {reportResult?.error && (
+                <Text style={s.errText}>{reportResult.error}</Text>
+              )}
             </View>
           )}
         </ScrollView>
@@ -920,6 +975,17 @@ const s = StyleSheet.create({
 
   // ── Bento metrics row ────────────────────────────────────────────────────
   bentoRow:                { flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingVertical: 6, flexWrap: 'wrap' },
+  metricRefresh:           { color: '#475569', fontSize: 8, fontFamily: 'monospace', textAlign: 'right', paddingHorizontal: 10, paddingTop: 2 },
+
+  // ── Sovereignty Audit Report ────────────────────────
+  reportPanel:             { margin: 10, padding: 10, backgroundColor: '#0d1a30', borderRadius: 4, borderWidth: 1, borderColor: '#1e293b' },
+  reportBtn:               { backgroundColor: 'rgba(0,102,255,0.12)', borderRadius: 4, borderWidth: 1, borderColor: '#0066ff', paddingVertical: 10, alignItems: 'center' },
+  reportBtnText:           { color: '#0066ff', fontSize: 9, fontFamily: 'monospace', fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+  reportResult:            { marginTop: 8 },
+  reportResultLabel:       { color: '#00e676', fontSize: 10, fontFamily: 'monospace', fontWeight: '700', marginBottom: 4 },
+  reportResultMeta:        { color: '#94a3b8', fontSize: 9, fontFamily: 'monospace', marginBottom: 6 },
+  reportMd:                { maxHeight: 120, backgroundColor: '#0b1326', borderRadius: 3, padding: 6, borderWidth: 1, borderColor: '#1e293b' },
+  reportMdText:            { color: '#94a3b8', fontSize: 8, fontFamily: 'monospace', lineHeight: 13 },
 
   // admin operations panel
   adminPanel:         { margin: 10, marginTop: 20, padding: 12, backgroundColor: '#1e1f23', borderRadius: 8, borderWidth: 1, borderColor: '#2d2f33' },

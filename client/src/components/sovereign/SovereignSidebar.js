@@ -66,7 +66,7 @@ export default function SovereignSidebar({
                   label={m.node_id}
                   value={m.latency_ms != null ? `${m.latency_ms}ms` : (m.cpu_pct != null ? `${m.cpu_pct}%` : '—')}
                   subValue={m.cpu_pct != null ? `CPU ${m.cpu_pct}%` : undefined}
-                  status={m.latency_ms > 500 || m.cpu_pct > 80 ? 'warning' : 'ok'}
+                  status={m.status ?? 'ok'}
                   nodeId={m.node_id}
                 />
               ))

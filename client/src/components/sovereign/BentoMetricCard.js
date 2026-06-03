@@ -6,12 +6,22 @@
 import { View, Text, StyleSheet } from 'react-native';
 
 const STATUS_COLORS = {
-  ok:      '#00e676',
-  warning: '#ffca28',
-  error:   '#ff1744',
-  indexing:'#0066ff',
-  ready:   '#00e676',
-  pending: '#90a4ae',
+  stable:    '#00e676',
+  degraded:  '#ffca28',
+  critical:  '#ff1744',
+  // legacy aliases
+  ok:        '#00e676',
+  warning:   '#ffca28',
+  error:     '#ff1744',
+  indexing:  '#0066ff',
+  ready:     '#00e676',
+  pending:   '#90a4ae',
+};
+
+const STATUS_LABELS = {
+  stable:   'STABLE',
+  degraded: 'DEGRADED',
+  critical: 'CRITICAL',
 };
 
 /**
@@ -24,6 +34,7 @@ const STATUS_COLORS = {
  */
 export default function BentoMetricCard({ label, value, subValue, status = 'ok', nodeId }) {
   const dotColor = STATUS_COLORS[status] ?? STATUS_COLORS.ok;
+  const statusLabel = STATUS_LABELS[status];
 
   return (
     <View style={s.card}>
@@ -33,7 +44,14 @@ export default function BentoMetricCard({ label, value, subValue, status = 'ok',
       </View>
       <Text style={s.value} numberOfLines={1}>{value}</Text>
       {!!subValue && <Text style={s.subValue} numberOfLines={1}>{subValue}</Text>}
-      {!!nodeId && <Text style={s.nodeId} numberOfLines={1}>{nodeId}</Text>}
+      <View style={s.footer}>
+        {!!statusLabel && (
+          <View style={[s.statusPill, { borderColor: dotColor, backgroundColor: `${dotColor}15` }]}>
+            <Text style={[s.statusText, { color: dotColor }]}>{statusLabel}</Text>
+          </View>
+        )}
+        {!!nodeId && <Text style={s.nodeId} numberOfLines={1}>{nodeId}</Text>}
+      </View>
     </View>
   );
 }
@@ -43,7 +61,7 @@ const s = StyleSheet.create({
     backgroundColor: '#0d1a30',
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#1a2e50',
+    borderColor: '#1e293b',
     padding: 10,
     minWidth: 110,
     flex: 1,
@@ -55,7 +73,7 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
   label: {
-    color: '#5e7a9e',
+    color: '#94a3b8',
     fontSize: 9,
     fontFamily: 'monospace',
     textTransform: 'uppercase',
@@ -69,23 +87,42 @@ const s = StyleSheet.create({
     marginLeft: 4,
   },
   value: {
-    color: '#e8f4ff',
+    color: '#e2e8f0',
     fontSize: 18,
     fontFamily: 'monospace',
     fontWeight: '700',
     letterSpacing: -0.5,
   },
   subValue: {
-    color: '#5e7a9e',
+    color: '#94a3b8',
     fontSize: 10,
     fontFamily: 'monospace',
     marginTop: 2,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    gap: 4,
+  },
+  statusPill: {
+    borderRadius: 3,
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  statusText: {
+    fontSize: 7,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   nodeId: {
     color: '#0066ff',
     fontSize: 8,
     fontFamily: 'monospace',
-    marginTop: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
