@@ -8,8 +8,10 @@ import HuddleWorkspace    from './HuddleWorkspace';
 import CollabCanvas       from './CollabCanvas';
 import { useSovereignMode }   from '../hooks/useSovereignMode';
 import SovereignHeader        from '../components/sovereign/SovereignHeader';
+import SovereignSidebar       from '../components/sovereign/SovereignSidebar';
 import BentoMetricCard        from '../components/sovereign/BentoMetricCard';
 import ObfuscatedMessage      from '../components/sovereign/ObfuscatedMessage';
+import ObfuscatedIdentityWrapper from '../components/sovereign/ObfuscatedIdentityWrapper';
 
 const WS_URL  = process.env.EXPO_PUBLIC_WS_URL  ?? 'wss://slack-api.akstest.win/ws/chat';
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://slack-api.akstest.win';
@@ -376,6 +378,23 @@ export default function MainWorkspace({ user, channels, onLogout }) {
       )}
 
       {/* ── Sidebar ─────────────────────────────────────────── */}
+      {sovereignMode ? (
+        <SovereignSidebar
+          channels={visibleChannels}
+          topicsMap={topicsMap}
+          expandedChannels={expandedChannels}
+          activeChannel={activeChannel}
+          activeTopic={activeTopic}
+          onToggleExpand={(chId) => setExpandedChannels((prev) => ({ ...prev, [chId]: !prev[chId] }))}
+          onSelectChannel={(ch) => { setActiveChannel(ch); setActiveThread(null); setActiveTopic(null); }}
+          onSelectTopic={(topic) => setActiveTopic(topic)}
+          onToggleSovereign={toggleSovereignMode}
+          isAdmin={isAdmin}
+          sovereignMetrics={sovereignMetrics}
+          onToggleMobile={() => setShowSidebar(false)}
+          isMobile={isMobile}
+        />
+      ) : (
       <View style={[s.sidebar, isMobile && s.sidebarMobile, isMobile && !showSidebar && s.sidebarHidden]}>
 
         {/* ── Sovereign Mode toggle ─────────────────────── */}
@@ -623,6 +642,7 @@ export default function MainWorkspace({ user, channels, onLogout }) {
           <Text style={s.logoutText}>Sign out</Text>
         </TouchableOpacity>
       </View>
+      )}
       {/* ── Mobile sidebar backdrop ───────────────────────────── */}
       {isMobile && showSidebar && (
         <TouchableOpacity style={s.mobileBackdrop} activeOpacity={1} onPress={() => setShowSidebar(false)} />
@@ -713,12 +733,27 @@ export default function MainWorkspace({ user, channels, onLogout }) {
             </View>
           )}
           {feedMessages.map((msg) => (
+            sovereignMode ? (
+              <ObfuscatedMessage
+                key={msg.id}
+                message={{ sender: msg.sender, content: msg.content, createdAt: msg.createdAt, id: msg.id }}
+                isAdmin={isAdmin}
+                realName={msg.realName ?? msg.real_name ?? undefined}
+                replyCount={msg.replyCount > 0 ? msg.replyCount : 0}
+                onReply={() => setActiveThread(msg)}
+              />
+            ) : (
             <TouchableOpacity
               key={msg.id}
               style={s.messageBubble}
               onPress={() => setActiveThread(msg)}
             >
-              <Text style={s.messageSender}>{msg.sender}</Text>
+              <ObfuscatedIdentityWrapper
+                displayName={msg.sender}
+                realName={msg.realName ?? msg.real_name ?? undefined}
+                isAdmin={isAdmin}
+                compact
+              />
               <Text style={s.messageBody}>{msg.content}</Text>
               {msg.attachment && (
                 <TouchableOpacity
@@ -733,6 +768,7 @@ export default function MainWorkspace({ user, channels, onLogout }) {
                 <Text style={s.replyCount}>{msg.replyCount} repl{msg.replyCount === 1 ? 'y' : 'ies'}</Text>
               )}
             </TouchableOpacity>
+            )
           ))}
         </ScrollView>
 
@@ -776,15 +812,33 @@ export default function MainWorkspace({ user, channels, onLogout }) {
           </View>
 
           {/* Root message */}
+          {sovereignMode ? (
+            <ObfuscatedMessage
+              message={{ sender: activeThread.sender, content: activeThread.content, createdAt: activeThread.createdAt, id: activeThread.id }}
+              isAdmin={isAdmin}
+              realName={activeThread.realName ?? activeThread.real_name ?? undefined}
+            />
+          ) : (
           <View style={[s.messageBubble, s.threadRoot]}>
-            <Text style={s.messageSender}>{activeThread.sender}</Text>
+            <ObfuscatedIdentityWrapper
+              displayName={activeThread.sender}
+              realName={activeThread.realName ?? activeThread.real_name ?? undefined}
+              isAdmin={isAdmin}
+              compact
+            />
             <Text style={s.messageBody}>{activeThread.content}</Text>
           </View>
+          )}
 
           <ScrollView style={s.messageList} contentContainerStyle={s.messageListContent}>
             {threadReplies.map((msg) => (
               <View key={msg.id} style={s.messageBubble}>
-                <Text style={s.messageSender}>{msg.sender}</Text>
+                <ObfuscatedIdentityWrapper
+                  displayName={msg.sender}
+                  realName={msg.realName ?? msg.real_name ?? undefined}
+                  isAdmin={isAdmin}
+                  compact
+                />
                 <Text style={s.messageBody}>{msg.content}</Text>
               </View>
             ))}
