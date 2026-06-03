@@ -26,21 +26,36 @@ export default function ObfuscatedIdentityWrapper({
   const isObfuscated = OB_CODE_RE.test(displayName ?? '');
   const isOwnMessage = currentUserId && userId && currentUserId === userId;
   const canSeeReal = isAdmin || isOwnMessage;
-  const showRealBadge = canSeeReal && isObfuscated && realName && realName !== displayName;
 
   return (
     <View style={[s.row, compact && s.rowCompact]}>
       <Text
-        style={[s.name, isObfuscated && s.obfuscated, compact && s.nameCompact]}
+        style={[
+          s.name,
+          isObfuscated && !canSeeReal && s.nameObscured,
+          canSeeReal && isObfuscated && s.nameOwn,
+          isObfuscated && canSeeReal && !isOwnMessage && s.nameAdmin,
+          compact && s.nameCompact,
+        ]}
         numberOfLines={1}
       >
         {displayName ?? '???'}
       </Text>
 
-      {showRealBadge && (
+      {/* Admin sees real name badge on obfuscated identities */}
+      {isAdmin && isObfuscated && realName && realName !== displayName && (
         <View style={[s.badge, compact && s.badgeCompact]}>
           <Text style={[s.badgeText, compact && s.badgeTextCompact]}>
             {realName}
+          </Text>
+        </View>
+      )}
+
+      {/* Non-admin viewers see SECURED indicator on obfuscated identities */}
+      {!canSeeReal && isObfuscated && (
+        <View style={[s.securedBadge, compact && s.securedBadgeCompact]}>
+          <Text style={[s.securedText, compact && s.securedTextCompact]}>
+            SECURED
           </Text>
         </View>
       )}
@@ -67,7 +82,16 @@ const s = StyleSheet.create({
   nameCompact: {
     fontSize: 11,
   },
-  obfuscated: {
+  nameObscured: {
+    color: '#a0aec0',
+    fontStyle: 'italic',
+    letterSpacing: 0.3,
+  },
+  nameOwn: {
+    color: '#00e676',
+    letterSpacing: 0.3,
+  },
+  nameAdmin: {
     color: '#00e676',
     letterSpacing: 0.3,
   },
@@ -90,5 +114,29 @@ const s = StyleSheet.create({
   },
   badgeTextCompact: {
     fontSize: 8,
+  },
+  securedBadge: {
+    backgroundColor: '#1e293b',
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  securedBadgeCompact: {
+    paddingHorizontal: 3,
+    paddingVertical: 0,
+  },
+  securedText: {
+    color: '#94a3b8',
+    fontSize: 8,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  securedTextCompact: {
+    fontSize: 7,
+    letterSpacing: 0.5,
   },
 });

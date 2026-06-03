@@ -219,7 +219,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   headerBtnText: {
-    color: '#5e7a9e',
+    color: '#94a3b8',
     fontSize: 12,
     fontFamily: 'monospace',
   },
@@ -253,7 +253,7 @@ const s = StyleSheet.create({
     paddingBottom: 8,
   },
   sectionTitle: {
-    color: '#3a5070',
+    color: '#94a3b8',
     fontSize: 9,
     fontFamily: 'monospace',
     fontWeight: '700',
@@ -290,13 +290,13 @@ const s = StyleSheet.create({
     borderLeftColor: '#0066ff',
   },
   expandIcon: {
-    color: '#3a5070',
+    color: '#64748b',
     fontSize: 9,
     fontFamily: 'monospace',
     width: 8,
   },
   containerName: {
-    color: '#5e7a9e',
+    color: '#94a3b8',
     fontSize: 10,
     fontFamily: 'monospace',
     fontWeight: '700',
@@ -312,10 +312,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderWidth: 1,
-    borderColor: '#1a2e50',
+    borderColor: '#334155',
   },
   countText: {
-    color: '#3a5070',
+    color: '#94a3b8',
     fontSize: 8,
     fontFamily: 'monospace',
   },
@@ -342,13 +342,13 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   topicName: {
-    color: '#4a6a8a',
+    color: '#94a3b8',
     fontSize: 11,
     fontFamily: 'monospace',
     flex: 1,
   },
   topicNameActive: {
-    color: '#e8f4ff',
+    color: '#e2e8f0',
   },
   topicBadge: {
     borderRadius: 3,
@@ -379,7 +379,7 @@ const s = StyleSheet.create({
     paddingVertical: 10,
   },
   footerTitle: {
-    color: '#3a5070',
+    color: '#94a3b8',
     fontSize: 8,
     fontFamily: 'monospace',
     fontWeight: '700',
@@ -400,7 +400,7 @@ const s = StyleSheet.create({
     borderRadius: 3,
   },
   footerLabel: {
-    color: '#5e7a9e',
+    color: '#94a3b8',
     fontSize: 8,
     fontFamily: 'monospace',
     textTransform: 'uppercase',
