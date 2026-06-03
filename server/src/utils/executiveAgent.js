@@ -14,6 +14,9 @@
 
 import pool from '../db/pool.js';
 
+/** System user ID for automated agent message persistence */
+const SYSTEM_AGENT_ID = '24dbd9f5-278d-4b56-99a2-793b76270dfb';
+
 // ─── Prompt-injection detection ───────────────────────────────────────────────
 // Checks document chunks for text that attempts to hijack LLM instructions.
 // Intentionally broad — false positives (flagging odd-but-benign text) are far
@@ -130,6 +133,21 @@ function agentFrame(channelId, content, extra = {}) {
     createdAt: new Date().toISOString(),
     ...extra,
   };
+}
+
+/**
+ * Persists an agent response to the messages table so it survives page reloads.
+ */
+async function persistAgentResponse(channelId, content, extra = {}) {
+  try {
+    await pool.query(
+      `INSERT INTO messages (channel_id, author_id, body, created_at)
+       VALUES ($1, $2, $3, now())`,
+      [channelId, SYSTEM_AGENT_ID, content],
+    );
+  } catch (err) {
+    console.error('[executiveAgent] Failed to persist agent response:', err.message);
+  }
 }
 
 /**
@@ -1003,6 +1021,7 @@ export async function handleAgentMention(userId, channelId, messageContent, send
       citation: ragMeta?.topChunkIds?.[0] ?? null,
       nodeId: process.env.EXPO_PUBLIC_NODE_LOCATION ?? 'NODE-01',
     }));
+    await persistAgentResponse(channelId, `${responseSender}: ${answer}`);
   } catch (err) {
     console.error('[executiveAgent] handleAgentMention error', err.message);
     broadcast(channelId, agentFrame(channelId, `Agent encountered an error: ${err.message}`, {
@@ -1011,5 +1030,6 @@ export async function handleAgentMention(userId, channelId, messageContent, send
       citation: null,
       nodeId: process.env.EXPO_PUBLIC_NODE_LOCATION ?? 'NODE-01',
     }));
+    await persistAgentResponse(channelId, `${responseSender} [ERROR]: ${err.message}`);
   }
 }
