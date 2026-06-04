@@ -14,14 +14,14 @@ export default async function channelRoutes(fastify) {
       if (!allowed) return reply.code(403).send({ error: 'Forbidden' });
     }
 
-    // Admins see real usernames; members see their identity-mapped obfuscated code
-    // (falling back to channel display_alias, then author UUID).
+    // Admins see real content; members see sanitized version (PII scrubbed).
     const { rows } = await pool.query(
       `SELECT
          m.id,
          m.channel_id                                        AS "channelId",
          m.parent_id                                         AS "parentId",
-         m.body                                              AS content,
+         CASE WHEN $2 = 'admin' THEN m.body
+              ELSE COALESCE(m.sanitized_body, m.body) END     AS content,
          m.created_at                                        AS "createdAt",
          CASE
            WHEN $2 = 'admin' THEN COALESCE(u.username, m.author_id::text)

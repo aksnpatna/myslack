@@ -102,13 +102,15 @@ export default async function chatRoutes(fastify, options) {
       // Upgrade connection entry with resolved role
       clients.set(connId, { socket, userId, channelId, role: senderRole });
 
-      // ── Message guard (skip for admins) ──────────────────────
-      let safeContent = content;
+      // ── Message guard ──────────────────────────────────
+      let safeContent  = content;
+      let filteredContent = content;
       if (senderRole !== 'admin') {
         const alias = aliasRows[0]?.display_alias ?? 'User';
         const guard = await validateAndSanitizeMessage(content, alias);
         if (!guard.isSafe || !guard.sanitizedContent.trim()) {
-          safeContent = BLOCKED_CONTENT;
+          safeContent    = BLOCKED_CONTENT;
+          filteredContent = BLOCKED_CONTENT;
 
           // ─ Fetch offender identity for audit context ─────────────
           const { rows: offenderRows } = await pool.query(
@@ -152,15 +154,25 @@ export default async function chatRoutes(fastify, options) {
           });
         } else {
           safeContent = guard.sanitizedContent;
+          filteredContent = guard.sanitizedContent;
+        }
+      } else {
+        // Admin messages: run pre-screen only (fast regex) for sanitized version
+        const { isSafe, sanitizedContent } = await validateAndSanitizeMessage(content, 'admin');
+        if (!isSafe || !sanitizedContent.trim()) {
+          // Admin sees raw, others see sanitized; also store raw for admin audit
+          filteredContent = BLOCKED_CONTENT;
+        } else {
+          filteredContent = sanitizedContent;
         }
       }
 
-      // Persist to messages table
+      // Persist to messages table (both raw and sanitized)
       const { rows: msgRows } = await pool.query(
-        `INSERT INTO messages (channel_id, author_id, parent_id, body)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO messages (channel_id, author_id, parent_id, body, sanitized_body)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id, created_at`,
-        [channelId, userId, parentId, safeContent],
+        [channelId, userId, parentId, content, filteredContent],
       );
 
       // Trigger bot RAG pipeline if message mentions @bot
@@ -183,12 +195,20 @@ export default async function chatRoutes(fastify, options) {
         channelId,
         sender:    senderIdentity,
         content:   safeContent,
+        sanitizedContent: filteredContent,
         parentId,
         createdAt: msgRows[0].created_at,
         ...(attachment && { attachment }),
       };
 
-      broadcastToChannel(channelId, broadcast);
+      // Role-based broadcast: admins see raw, members see sanitized
+      const adminFrame   = JSON.stringify({ ...broadcast, content: safeContent });
+      const memberFrame  = JSON.stringify({ ...broadcast, content: filteredContent });
+      for (const [, client] of clients) {
+        if (client.channelId === channelId && client.socket.readyState === 1) {
+          client.socket.send(client.role === 'admin' ? adminFrame : memberFrame);
+        }
+      }
     });
 
     socket.on('close', () => clients.delete(connId));
