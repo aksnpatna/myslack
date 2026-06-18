@@ -54,6 +54,9 @@ services:
       DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@postgres:5432/slack_clone_db
       PORT: "3000"
       HOST: "0.0.0.0"
+      BROKER_BACKEND_URL: ${BROKER_BACKEND_URL:-http://host.docker.internal:8001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3001:3000"
     healthcheck:

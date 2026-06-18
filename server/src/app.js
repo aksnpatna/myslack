@@ -12,6 +12,7 @@ import channelRoutes    from './routes/channels.js';
 import adminControls    from './routes/adminControls.js';
 import mediaRoutes      from './routes/media.js';
 import complianceRoutes from './routes/compliance.js';
+import huddleNotesRoutes from './routes/huddleNotes.js';
 
 const app = Fastify({ logger: true });
 
@@ -44,6 +45,7 @@ await app.register(channelRoutes);
 await app.register(adminControls);
 await app.register(mediaRoutes);
 await app.register(complianceRoutes);
+await app.register(huddleNotesRoutes);
 
 app.get('/health', async () => ({ status: 'ok' }));
 
